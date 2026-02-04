@@ -1,4 +1,7 @@
 ||googletagmanager.com^$important
-||googletagmanager.com^$important
-||googletagmanager.com^$important
-||googletagmanager.com^$important
+||googlesyndication.com^$important
+||google-analytics^$important
+||googletagservices.com^$important
+||doubleclick.net^$important
+||example.com^$important
+||google.com^$3p,important
