@@ -1,0 +1,28 @@
+# Local environment files (keep placeholder examples trackable)
+.env
+.env.*
+*.env
+!.env.example
+
+# Local credentials and private keys
+.secrets/
+secrets/
+credentials.json
+credentials.local.json
+secrets.json
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519
+
+# Runtime logs may contain private data
+*.log
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
