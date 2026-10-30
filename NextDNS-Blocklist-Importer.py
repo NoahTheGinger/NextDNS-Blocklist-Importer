@@ -111,6 +111,10 @@ class BlocklistParser:
         ),
     }
     
+    # ABP rule modifiers that still mean "block this domain" at the DNS level.
+    # Anything else ($third-party, $domain=, $script, ...) depends on page context.
+    DNS_SAFE_OPTIONS = {'important', 'all'}
+
     # Domains to always skip (localhost, local addresses, etc.)
     SKIP_DOMAINS = {
         'localhost', 'localhost.localdomain', 'local',
@@ -207,7 +211,8 @@ class BlocklistParser:
         match = cls.PATTERNS['abp_with_options'].match(line)
         if match:
             domain = match.group(1).lower()
-            if cls.is_valid_domain(domain):
+            options = set(line.rsplit('$', 1)[1].split(','))
+            if options <= cls.DNS_SAFE_OPTIONS and cls.is_valid_domain(domain):
                 return domain, False
             return None, False
         
@@ -314,7 +319,7 @@ class NextDNSClient:
             # Fallback to urllib
             req = urllib.request.Request(
                 url,
-                data=json.dumps(data).encode() if data else None,
+                data=json.dumps(data).encode() if data is not None else None,
                 headers=self.headers,
                 method=method
             )
@@ -402,8 +407,8 @@ class NextDNSClient:
                 if progress_callback:
                     progress_callback(f"Found {len(existing_list)} existing entries", 10, 100)
             except Exception as e:
-                results["errors"].append(f"Failed to fetch existing denylist: {e}")
-                # Continue anyway - we'll just add new domains
+                # Abort: uploading without the existing entries would overwrite them
+                raise RuntimeError(f"Failed to fetch existing denylist, nothing was changed: {e}") from e
         
         # Build combined list
         if progress_callback:
@@ -568,7 +573,7 @@ if PYTHONISTA:
             try:
                 client = NextDNSClient(self.api_key, self.profile_id)
                 profile_info = client.get_profile_info()
-                print(f"✓ Connected to profile: {profile_info.get('name', self.profile_id)}")
+                print(f"✓ Connected to profile: {(profile_info.get('data') or profile_info).get('name', self.profile_id)}")
             except Exception as e:
                 console.alert("Error", f"Failed to connect to NextDNS: {e}")
                 return
@@ -679,13 +684,13 @@ def cli_main():
     )
     parser.add_argument(
         "--api-key", "-k",
-        required=True,
-        help="NextDNS API key"
+        default=os.environ.get("NEXTDNS_API_KEY"),
+        help="NextDNS API key (default: $NEXTDNS_API_KEY)"
     )
     parser.add_argument(
         "--profile", "-p",
-        required=True,
-        help="NextDNS profile ID"
+        default=os.environ.get("NEXTDNS_PROFILE_ID"),
+        help="NextDNS profile ID (default: $NEXTDNS_PROFILE_ID)"
     )
     parser.add_argument(
         "--urls", "-u",
@@ -718,6 +723,10 @@ def cli_main():
     
     if not args.urls and not args.files:
         parser.error("At least one --urls or --files must be specified")
+
+    if not args.dry_run and not (args.api_key and args.profile):
+        parser.error("An API key and profile ID are required (use --api-key/--profile or "
+                     "NEXTDNS_API_KEY/NEXTDNS_PROFILE_ID), unless --dry-run is set")
     
     all_domains = set()
     
@@ -762,7 +771,7 @@ def cli_main():
         
         try:
             profile = client.get_profile_info()
-            print(f"Profile: {profile.get('name', args.profile)}")
+            print(f"Profile: {(profile.get('data') or profile).get('name', args.profile)}")
         except Exception as e:
             print(f"Error connecting: {e}")
             return 1
